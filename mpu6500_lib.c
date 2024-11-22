@@ -95,7 +95,8 @@ void mpu_read_bytes(spi_device_handle_t handle, uint8_t regAddr, uint8_t length,
     spi_device_transmit(handle, &transaction);   
 }
 
-void mpu_write_bytes(spi_device_handle_t handle, uint8_t regAddr, uint8_t length, uint8_t data){
+void mpu_write_byte(spi_device_handle_t handle, uint8_t regAddr, uint8_t data){
+	uint8_t length = 1;
 	uint8_t buffer[16];
 	memset(buffer, 0, sizeof(buffer));
 	buffer[0] = data;
@@ -111,20 +112,34 @@ void mpu_write_bytes(spi_device_handle_t handle, uint8_t regAddr, uint8_t length
     spi_device_transmit(handle, &transaction);
 }
 
+void mpu_write_bytes(spi_device_handle_t handle, uint8_t regAddr,uint8_t length, uint8_t *data){
+	memset(data, 0, sizeof(data));
+	spi_transaction_t transaction;
+    transaction.flags = 0;
+    //transaction.cmd = data;
+    transaction.addr = regAddr & SPIBUS_WRITE;
+    transaction.length = length * 8;
+    transaction.rxlength = 0;
+    transaction.user = NULL;
+    transaction.tx_buffer = data;
+    transaction.rx_buffer = NULL;
+    spi_device_transmit(handle, &transaction);
+}
+
 void mpu_reset_user_ctrl(spi_device_handle_t handle) {
-	mpu_write_bytes(handle,USER_CTRL,1,SIG_COND_RST);
+	mpu_write_byte(handle,USER_CTRL,SIG_COND_RST);
 	vTaskDelay(100 / portTICK_PERIOD_MS);
 	ESP_LOGI("mpu_reset_user_ctrl","user ctrl reset");
 }
 
 void mpu_reset_signal_path(spi_device_handle_t handle) {
-	mpu_write_bytes(handle,SIGNAL_PATH_RESET,1,0x07);
+	mpu_write_byte(handle,SIGNAL_PATH_RESET,0x07);
 	vTaskDelay(100 / portTICK_PERIOD_MS);
 	ESP_LOGI("mpu_reset_signal_path","signal path reset");
 }
 
 void mpu_reset(spi_device_handle_t handle) {
-	mpu_write_bytes(handle,PWR_MGMT_1,1,PWR1_DEVICE_RESET);
+	mpu_write_byte(handle,PWR_MGMT_1,PWR1_DEVICE_RESET);
 	vTaskDelay(100 / portTICK_PERIOD_MS);
 	mpu_reset_user_ctrl(handle);
 	ESP_LOGI("mpu_reset","mpu reset");
@@ -133,9 +148,9 @@ void mpu_reset(spi_device_handle_t handle) {
 void mpu_init(spi_device_handle_t handle) {
 	uint8_t data[16]; 
     memset(data, 0, sizeof(data));
-	mpu_write_bytes(handle,PWR_MGMT_1, 1, PWR1_DEVICE_RESET);
+	mpu_write_byte(handle,PWR_MGMT_1, PWR1_DEVICE_RESET);
 	vTaskDelay(100 / portTICK_PERIOD_MS);
-	mpu_write_bytes(handle,PWR_MGMT_1, 1, 0x00);
+	mpu_write_byte(handle,PWR_MGMT_1, 0x00);
 	uint8_t buffer[16];
 	memset(buffer, 0, sizeof(buffer));
 	mpu_read_bytes(handle, PWR_MGMT_1, 1, buffer);
@@ -144,10 +159,10 @@ void mpu_init(spi_device_handle_t handle) {
 
 void mpu_accel_init(spi_device_handle_t handle,int16_t *accel_offsets) {
 	int32_t x_sum = 0, y_sum = 0, z_sum = 0;
-    int16_t x, y, z;
+    int16_t x = 0, y = 0, z = 0;
 	uint8_t buffer[16];
 	memset(buffer, 0, sizeof(buffer));
-	mpu_write_bytes(handle, ACCEL_CONFIG, 1, ACCEL_16G);
+	mpu_write_byte(handle, ACCEL_CONFIG, ACCEL_16G);
 	mpu_read_bytes(handle, ACCEL_CONFIG, 1, buffer);
 	ESP_LOGI("mpu_accel_init","mpu sensivety: %x",buffer[0]);
 	for (int i = 0; i < CALIBRATION_SAMPLES; i++) {
@@ -164,9 +179,14 @@ void mpu_accel_init(spi_device_handle_t handle,int16_t *accel_offsets) {
 
         vTaskDelay(pdMS_TO_TICKS(10)); // Wait 10ms between samples
     }
+    
     accel_offsets[0] = -(x_sum / CALIBRATION_SAMPLES);
+    ESP_LOGI("mpu_accel_init","accel_offsets_x: %d",accel_offsets[0]);	
     accel_offsets[1] = -(y_sum / CALIBRATION_SAMPLES);
-    accel_offsets[2] = -(z_sum / CALIBRATION_SAMPLES); // 16384 is the expected value for z-axis when the sensor is flat
+    ESP_LOGI("mpu_accel_init","accel_offsets_y: %d",accel_offsets[1]);	
+    accel_offsets[2] = -(z_sum / CALIBRATION_SAMPLES);
+    ESP_LOGI("mpu_accel_init","accel_offsets_z: %d",accel_offsets[2]);	
+    
 };
 
 void mpu_gyro_init(spi_device_handle_t handle) {};
@@ -185,7 +205,7 @@ void mpu_whoami(spi_device_handle_t handle) {
 
 void mpu_smplrt_div(spi_device_handle_t handle, uint8_t smplrt_div, uint8_t *data) {
 	memset(data, 0, sizeof(data));
-	mpu_write_bytes(handle,SMPLRT_DIV, 1, smplrt_div);
+	mpu_write_byte(handle,SMPLRT_DIV, smplrt_div);
 	mpu_read_bytes(handle, SMPLRT_DIV, 1,  data);
 	for(int i =0;i<1;i++){
 		ESP_LOGI("mpu_smplrt_div","data: %x",data[i]);	
@@ -213,7 +233,7 @@ void mpu_read_accel(spi_device_handle_t handle,uint8_t *data,int16_t *accel_offs
 
 void mpu_config(spi_device_handle_t handle,uint8_t *data) {
 	memset(data, 0, sizeof(data));
-	mpu_write_bytes(handle,CONFIG, 1, 0x03);
+	mpu_write_byte(handle,CONFIG, 0x03);
 	mpu_read_bytes(handle, CONFIG, 1,  data);
 	for(int i =0;i<1;i++){
 		ESP_LOGI("mpu_config","data: %x",data[i]);	
@@ -222,7 +242,7 @@ void mpu_config(spi_device_handle_t handle,uint8_t *data) {
 
 void mpu6500_data(void) {
 	uint8_t data[16]; 
-	int16_t accel_offsets[16]; 
+	int16_t accel_offsets[3]={0,0,0}; 
     memset(data, 0, sizeof(data));
 	spi_device_handle_t handle;
 	spi_init(&handle);
