@@ -24,6 +24,26 @@
 #define MPU6500_GYRO_CONFIG 0x1B
 #define MPU6500_ACCEL_CONFIG 0x1C
 
+#define ACCEL_CONFIG2                 0x1D
+#define ACONFIG2_FIFO_SIZE_BIT        7  // [7:6]
+#define ACONFIG2_FIFO_SIZE_LENGTH     2
+#define ACONFIG2_ACCEL_FCHOICE_B_BIT  3
+#define ACONFIG2_A_DLPF_CFG_BIT       2  // [2:0]
+#define ACONFIG2_A_DLPF_CFG_LENGTH    3
+#define FIFO_SIZE_1K 				  1
+
+#define ACCEL_CONFIG        	0x1C
+#define ACONFIG_XA_ST_BIT   	7
+#define ACONFIG_YA_ST_BIT   	6
+#define ACONFIG_ZA_ST_BIT   	5
+#define ACONFIG_FS_SEL_BIT  	4  // [4:3]
+#define ACONFIG_FS_SEL_LENGT	2
+#define ACONFIG_HPF_BIT     	2  // [2:0]
+#define ACONFIG_HPF_LENGTH  	3
+
+#define ACONFIG_FS_SEL_LENGTH 	2
+#define ACCEL_FS_4G 			1
+
 #define SPIBUS_READ     (0x80)  /*!< addr | SPIBUS_READ  */
 #define SPIBUS_WRITE    (0x7F)  /*!< addr & SPIBUS_WRITE */
 
@@ -59,7 +79,7 @@ void spi_init(spi_device_handle_t *handle) {
     spi_bus_add_device(HOST, &dev_config, handle);
 }
 
-void mpu_read(spi_device_handle_t handle, uint8_t regAddr, uint8_t length, int16_t *data) {
+void mpu_read_bytes(spi_device_handle_t handle, uint8_t regAddr, uint8_t length, int16_t *data) {
     spi_transaction_t transaction;
     transaction.flags = 0;
     transaction.cmd = 0;
@@ -72,9 +92,16 @@ void mpu_read(spi_device_handle_t handle, uint8_t regAddr, uint8_t length, int16
     spi_device_transmit(handle, &transaction);   
 }
 
-void mpu_write(spi_device_handle_t handle, uint8_t regAddr, uint8_t length){
-	uint8_t data[16]; 
-    memset(data, 0, sizeof(data));
+void mpu_read_bits(  spi_device_handle_t handle, uint8_t regAddr, uint8_t bitStart, uint8_t length, int16_t *data) {
+    int16_t buffer;
+    mpu_read_bytes(handle, regAddr,1, &buffer);
+    uint8_t mask = ((1 << length) - 1) << (bitStart - length + 1);
+    buffer &= mask;
+    buffer >>= (bitStart - length + 1);
+    *data = buffer;
+}
+
+void mpu_write_bytes_usebuffer(spi_device_handle_t handle, uint8_t regAddr, uint8_t length, int16_t *data){
 	spi_transaction_t transaction;
     transaction.flags = 0;
     transaction.cmd = 0;
@@ -86,16 +113,55 @@ void mpu_write(spi_device_handle_t handle, uint8_t regAddr, uint8_t length){
     transaction.rx_buffer = NULL;
     spi_device_transmit(handle, &transaction);
 	for(int i =0;i<length;i++){
-		ESP_LOGI("test","data: %x",data[i]);	
+		ESP_LOGI("mpu_write_bytes_usebuffer","data: %x",data[i]);	
 	}
 }
 
-void mpu_init(spi_device_handle_t handle) {
-    mpu_write(handle,MPU6500_PWR_MGMT_1,1);//если я правильно поял он записывает то что в бафере
+void mpu_write_bytes(spi_device_handle_t handle, uint8_t regAddr, uint8_t length, uint8_t data){
+	uint8_t buffer[16];
+	memset(buffer, 0, sizeof(buffer));
+	buffer[0] = data;
+	spi_transaction_t transaction;
+    transaction.flags = 0;
+    //transaction.cmd = data;
+    transaction.addr = regAddr & SPIBUS_WRITE;
+    transaction.length = length * 8;
+    transaction.rxlength = 0;
+    transaction.user = NULL;
+    transaction.tx_buffer = buffer;
+    transaction.rx_buffer = NULL;
+    spi_device_transmit(handle, &transaction);
+}
 
-	mpu_write(handle,MPU6500_GYRO_CONFIG,1);
-	
-	mpu_write(handle,MPU6500_ACCEL_CONFIG,1);
+void mpu_write_bits(spi_device_handle_t handle, uint8_t regAddr, uint8_t bitStart, uint8_t length, int16_t data) {
+    int16_t buffer;
+    mpu_read_bytes(handle, regAddr, 1,&buffer);
+    uint8_t mask = ((1 << length) - 1) << (bitStart - length + 1);
+    data <<= (bitStart - length + 1);
+    data &= mask;
+    buffer &= ~mask;
+    buffer |= data;
+    mpu_write_bytes_usebuffer(handle, regAddr,1, &buffer);
+}
+
+void mpu_init_old(spi_device_handle_t handle) {
+	int16_t data[16]; 
+    memset(data, 0, sizeof(data));
+	mpu_write_bits(handle, ACCEL_CONFIG2 , ACONFIG2_FIFO_SIZE_BIT,
+	 ACONFIG2_FIFO_SIZE_LENGTH, FIFO_SIZE_1K);
+	 //gyro
+	 
+	 //accel
+	 
+	 mpu_write_bits(handle, ACCEL_CONFIG, ACONFIG_FS_SEL_BIT, ACONFIG_FS_SEL_LENGTH, ACCEL_FS_4G);
+}
+
+void mpu_init(spi_device_handle_t handle) {
+	int16_t data[16]; 
+    memset(data, 0, sizeof(data));
+	mpu_write_bytes(handle,0x6B, 1, 0x80);
+	vTaskDelay(100 / portTICK_PERIOD_MS);
+	mpu_write_bytes(handle,0x6B, 1, 0x00);
 }
 
 void mpu_whoami(spi_device_handle_t handle) {
@@ -103,11 +169,42 @@ void mpu_whoami(spi_device_handle_t handle) {
     memset(data, 0, sizeof(data));
     uint8_t length = 1;
 	
-	mpu_read(handle,MPU6500_WHO_AM_I,length,data);
+	mpu_read_bytes(handle,MPU6500_WHO_AM_I,length,data);
 	
 	for(int i =0;i<length;i++){
-		ESP_LOGI("test","data: %x",data[i]);	
+		ESP_LOGI("mpu_whoami","data: %x",data[i]);	
 	}
+}
+
+void mpu_get_rate(spi_device_handle_t handle) {
+	int16_t data[16]; 
+    memset(data, 0, sizeof(data));
+    uint8_t length = 1;
+	
+	mpu_read_bytes(handle,0x19,length,data);
+	
+	for(int i =0;i<length;i++){
+		ESP_LOGI("mpu_get_rate","data: %x",data[i]);	
+	}
+	uint16_t internalSampleRate = 1000;
+	uint16_t rate = internalSampleRate / (1 + data[0]);//разобраться что такое iternalsamplerate
+	for(int i =0;i<length;i++){
+		ESP_LOGI("mpu_get_rate","rate: %d",rate);	
+	}
+}
+
+void mpu_set_rate(spi_device_handle_t handle,int16_t rate) {
+	int16_t internalSampleRate = 1000;
+    int16_t divider = internalSampleRate / rate - 1;
+    // Check for rate match
+    uint16_t finalRate = (internalSampleRate / (1 + divider));
+    if (finalRate != rate) {
+        ESP_LOGW("mpu_set_rate","Sample rate constrained to %d Hz", finalRate);
+    }
+    else {
+        ESP_LOGI("mpu_set_rate","Sample rate set to %d Hz", finalRate);
+    }
+    mpu_write_bytes_usebuffer(handle,0x19,1,&divider);
 }
 
 void mpu_read_accel(spi_device_handle_t handle) {
@@ -115,26 +212,43 @@ void mpu_read_accel(spi_device_handle_t handle) {
     memset(data, 0, sizeof(data));
     uint8_t length = 16;
 	
-	mpu_read(handle,0x3B,length,data);
+	mpu_read_bytes(handle,0x3B,length,data);
 	
 	for(int i =0;i<length;i++){
-		ESP_LOGI("test","data: %x",data[i]);	
+		ESP_LOGI("mpu_read_accel","data: %x",data[i]);	
 	}	
 	int16_t x = (data[0] << 8) | data[1];
 	int16_t y = (data[2] << 8) | data[3];
 	int16_t z = (data[4] << 8) | data[5];
-	ESP_LOGI("test","x: %d",x);	
-	ESP_LOGI("test","y: %d",y);	
-	ESP_LOGI("test","z: %d",z);	
+	ESP_LOGI("mpu_read_accel","x: %d",x);	
+	ESP_LOGI("mpu_read_accel","y: %d",y);	
+	ESP_LOGI("mpu_read_accel","z: %d",z);	
 }
 
 void mpu6500_data(void) {
+	int16_t data[16]; 
+    memset(data, 0, sizeof(data));
 	spi_device_handle_t handle;
 	spi_init(&handle);
 	mpu_whoami(handle);
-	mpu_init(handle);//не работает
-	while(1) {
-		mpu_read_accel(handle);//не работает
-		vTaskDelay(1000 / portTICK_PERIOD_MS);
+	//не работает
+	mpu_init(handle);
+	mpu_write_bytes(handle,0x19, 1, 0x05);
+	mpu_read_bytes(handle, 0x19, 1,  data);
+	for(int i =0;i<1;i++){
+		ESP_LOGI("1","data: %x",data[i]);	
 	}
+	mpu_write_bytes(handle,0x19, 1, 0x0A);
+	mpu_read_bytes(handle, 0x19, 1,  data);
+	for(int i =0;i<1;i++){
+		ESP_LOGI("2","data: %x",data[i]);	
+	}
+	//mpu_set_rate(handle,1000);
+	//mpu_get_rate(handle);
+	//mpu_init(handle);
+	/*while(1) {
+		mpu_read_accel(handle);
+		vTaskDelay(1000 / portTICK_PERIOD_MS);
+	}*/
+	//не работает
 }
