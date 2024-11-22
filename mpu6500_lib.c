@@ -19,15 +19,36 @@
 
 #define SPI_CLOCK_SPEED_HZ (500*1000) 
 
-#define MPU6500_WHO_AM_I    0x75
-#define MPU6500_PWR_MGMT_1  0x6B
-#define SMPLRT_DIV			0x19
+#define WHO_AM_I    		0x75
+#define PWR_MGMT_1  		0x6B
+#define SMPLRT_DIV			0x68
+#define SIGNAL_PATH_RESET   0x68
+#define USER_CTRL  			0x6A
+#define SIGNAL_PATH_RESET	0x68
+
+#define PWR1_DEVICE_RESET   0x80
+#define SIG_COND_RST   		0x01
 
 
-#define SPIBUS_READ     (0x80)  /*!< addr | SPIBUS_READ  */
-#define SPIBUS_WRITE    (0x7F)  /*!< addr & SPIBUS_WRITE */
+#define ACCEL_CONFIG 		0x1C
+#define ACCEL_2G			0xE0
+#define ACCEL_4G			0xE8
+#define ACCEL_8G			0xF0
+#define ACCEL_16G			0xF8
+#define ACCEL_XOUT_H     	0x3B
+#define CALIBRATION_SAMPLES 100
 
-uint8_t buffer[16];  
+#define MPU6050_REG_ACCEL_XOFFS_H 0x06
+#define MPU6050_REG_ACCEL_XOFFS_L 0x07
+#define MPU6050_REG_ACCEL_YOFFS_H 0x08
+#define MPU6050_REG_ACCEL_YOFFS_L 0x09
+#define MPU6050_REG_ACCEL_ZOFFS_H 0x0A
+#define MPU6050_REG_ACCEL_ZOFFS_L 0x0B
+
+#define CONFIG              0x1A
+
+#define SPIBUS_READ     	(0x80)  /*!< addr | SPIBUS_READ  */
+#define SPIBUS_WRITE    	(0x7F)  /*!< addr & SPIBUS_WRITE */
 
 void spi_init(spi_device_handle_t *handle) {
 	//SPI_BEGIN
@@ -59,7 +80,9 @@ void spi_init(spi_device_handle_t *handle) {
     spi_bus_add_device(HOST, &dev_config, handle);
 }
 
-void mpu_read_bytes(spi_device_handle_t handle, uint8_t regAddr, uint8_t length, int16_t *data) {
+//переписать нормально 
+
+void mpu_read_bytes(spi_device_handle_t handle, uint8_t regAddr, uint8_t length, uint8_t *data) {
     spi_transaction_t transaction;
     transaction.flags = 0;
     transaction.cmd = 0;
@@ -88,31 +111,79 @@ void mpu_write_bytes(spi_device_handle_t handle, uint8_t regAddr, uint8_t length
     spi_device_transmit(handle, &transaction);
 }
 
-void mpu_init(spi_device_handle_t handle) {
-	int16_t data[16]; 
-    memset(data, 0, sizeof(data));
-	mpu_write_bytes(handle,MPU6500_PWR_MGMT_1, 1, 0x80);
+void mpu_reset_user_ctrl(spi_device_handle_t handle) {
+	mpu_write_bytes(handle,USER_CTRL,1,SIG_COND_RST);
 	vTaskDelay(100 / portTICK_PERIOD_MS);
-	mpu_write_bytes(handle,MPU6500_PWR_MGMT_1, 1, 0x00);
+	ESP_LOGI("mpu_reset_user_ctrl","user ctrl reset");
 }
 
-void mpu_accel_init(spi_device_handle_t handle) {};
+void mpu_reset_signal_path(spi_device_handle_t handle) {
+	mpu_write_bytes(handle,SIGNAL_PATH_RESET,1,0x07);
+	vTaskDelay(100 / portTICK_PERIOD_MS);
+	ESP_LOGI("mpu_reset_signal_path","signal path reset");
+}
+
+void mpu_reset(spi_device_handle_t handle) {
+	mpu_write_bytes(handle,PWR_MGMT_1,1,PWR1_DEVICE_RESET);
+	vTaskDelay(100 / portTICK_PERIOD_MS);
+	mpu_reset_user_ctrl(handle);
+	ESP_LOGI("mpu_reset","mpu reset");
+}
+
+void mpu_init(spi_device_handle_t handle) {
+	uint8_t data[16]; 
+    memset(data, 0, sizeof(data));
+	mpu_write_bytes(handle,PWR_MGMT_1, 1, PWR1_DEVICE_RESET);
+	vTaskDelay(100 / portTICK_PERIOD_MS);
+	mpu_write_bytes(handle,PWR_MGMT_1, 1, 0x00);
+	uint8_t buffer[16];
+	memset(buffer, 0, sizeof(buffer));
+	mpu_read_bytes(handle, PWR_MGMT_1, 1, buffer);
+	ESP_LOGI("mpu_init","mpu: %x",buffer[0]);
+}
+
+void mpu_accel_init(spi_device_handle_t handle,int16_t *accel_offsets) {
+	int32_t x_sum = 0, y_sum = 0, z_sum = 0;
+    int16_t x, y, z;
+	uint8_t buffer[16];
+	memset(buffer, 0, sizeof(buffer));
+	mpu_write_bytes(handle, ACCEL_CONFIG, 1, ACCEL_16G);
+	mpu_read_bytes(handle, ACCEL_CONFIG, 1, buffer);
+	ESP_LOGI("mpu_accel_init","mpu sensivety: %x",buffer[0]);
+	for (int i = 0; i < CALIBRATION_SAMPLES; i++) {
+        uint8_t data[6];
+        mpu_read_bytes(handle, ACCEL_XOUT_H, 6, data);
+
+        x = (data[0] << 8) | data[1];
+        y = (data[2] << 8) | data[3];
+        z = (data[4] << 8) | data[5];
+
+        x_sum += x;
+        y_sum += y;
+        z_sum += z;
+
+        vTaskDelay(pdMS_TO_TICKS(10)); // Wait 10ms between samples
+    }
+    accel_offsets[0] = -(x_sum / CALIBRATION_SAMPLES);
+    accel_offsets[1] = -(y_sum / CALIBRATION_SAMPLES);
+    accel_offsets[2] = -(z_sum / CALIBRATION_SAMPLES); // 16384 is the expected value for z-axis when the sensor is flat
+};
 
 void mpu_gyro_init(spi_device_handle_t handle) {};
 
 void mpu_whoami(spi_device_handle_t handle) {
-	int16_t data[16]; 
+	uint8_t data[16]; 
     memset(data, 0, sizeof(data));
     uint8_t length = 1;
 	
-	mpu_read_bytes(handle,MPU6500_WHO_AM_I,length,data);
+	mpu_read_bytes(handle,WHO_AM_I,length,data);
 	
 	for(int i =0;i<length;i++){
 		ESP_LOGI("mpu_whoami","data: %x",data[i]);	
 	}
 }
 
-void mpu_smplrt_div(spi_device_handle_t handle, uint8_t smplrt_div, int16_t *data) {
+void mpu_smplrt_div(spi_device_handle_t handle, uint8_t smplrt_div, uint8_t *data) {
 	memset(data, 0, sizeof(data));
 	mpu_write_bytes(handle,SMPLRT_DIV, 1, smplrt_div);
 	mpu_read_bytes(handle, SMPLRT_DIV, 1,  data);
@@ -121,17 +192,46 @@ void mpu_smplrt_div(spi_device_handle_t handle, uint8_t smplrt_div, int16_t *dat
 	}
 }
 
-void mpu_read_accel(spi_device_handle_t handle) {};
+void mpu_read_accel(spi_device_handle_t handle,uint8_t *data,int16_t *accel_offsets) {
+	memset(data, 0, sizeof(data));
+	mpu_read_bytes(handle, ACCEL_XOUT_H, 6,  data);
+	/*for(int i =0;i<6;i++){
+		ESP_LOGI("mpu_read_accel","data: %x",data[i]);	
+	}*/
+    int16_t x = data[0] << 8 | data[1];
+    int16_t y = data[2] << 8 | data[3];
+    int16_t z = data[4] << 8 | data[5];
+    
+    x += accel_offsets[0];
+    y += accel_offsets[1];
+    z += accel_offsets[2];
+    
+    ESP_LOGI("mpu_read_accel","x: %d",x);	
+    ESP_LOGI("mpu_read_accel","y: %d",y);	
+    ESP_LOGI("mpu_read_accel","z: %d",z);	
+}
+
+void mpu_config(spi_device_handle_t handle,uint8_t *data) {
+	memset(data, 0, sizeof(data));
+	mpu_write_bytes(handle,CONFIG, 1, 0x03);
+	mpu_read_bytes(handle, CONFIG, 1,  data);
+	for(int i =0;i<1;i++){
+		ESP_LOGI("mpu_config","data: %x",data[i]);	
+	}
+}
 
 void mpu6500_data(void) {
-	int16_t data[16]; 
+	uint8_t data[16]; 
+	int16_t accel_offsets[16]; 
     memset(data, 0, sizeof(data));
 	spi_device_handle_t handle;
 	spi_init(&handle);
 	mpu_whoami(handle);
 	mpu_init(handle);
+	mpu_config(handle,data);
+	mpu_accel_init(handle,accel_offsets);
 	while(1) {
-
+		mpu_read_accel(handle,data,accel_offsets);
 		vTaskDelay(1000 / portTICK_PERIOD_MS);
 	}
 }
