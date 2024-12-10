@@ -34,62 +34,30 @@
 
 #define ACCEL_CONFIG 		0x1C
 #define ACCEL_2G			0xE0
+#define ACCEL_2G_sens		2
 #define ACCEL_4G			0xE8
+#define ACCEL_4G_sens		4
 #define ACCEL_8G			0xF0
+#define ACCEL_8G_sens		8
 #define ACCEL_16G			0xF8
+#define ACCEL_16G_sens		16
 #define ACCEL_XOUT_H     	0x3B
 
 #define GYRO_CONFIG			0x1B
 #define GYRO_250_DPS		0xE0
+#define GYRO_250_DPS_sens	250
 #define GYRO_500_DPS		0xE8
+#define GYRO_500_DPS_sens	500
 #define GYRO_1000_DPS		0xF0
+#define GYRO_1000_DPS_sens	1000
 #define GYRO_2000_DPS		0xF8
+#define GYRO_2000_DPS_sens	2000
 #define GYRO_XOUT_H 		0x43
 
 #define CONFIG              0x1A
 
 #define SPIBUS_READ     	(0x80)  /*!< addr | SPIBUS_READ  */
 #define SPIBUS_WRITE    	(0x7F)  /*!< addr & SPIBUS_WRITE */
-
-///////////////////////////
-/*
-typedef struct {
-    float x;  // Оценка состояния
-    float P;  // Оценка ковариации ошибки
-    float Q;  // Ковариация шума процесса
-    float R;  // Ковариация шума измерения
-    float K;  // Коэффициент усиления Калмана
-} KalmanFilter;
-
-static KalmanFilter accel_x_kf;  // Глобальная переменная для фильтра Калмана
-static KalmanFilter accel_y_kf;  // Глобальная переменная для фильтра Калмана
-static KalmanFilter accel_z_kf;  // Глобальная переменная для фильтра Калмана
-static KalmanFilter gyro_x_kf;  // Глобальная переменная для фильтра Калмана
-static KalmanFilter gyro_y_kf;  // Глобальная переменная для фильтра Калмана
-static KalmanFilter gyro_z_kf;  // Глобальная переменная для фильтра Калмана
-
-// Инициализация фильтра Калмана
-static void kalmanFilterInit(KalmanFilter *kf, float initial_x, float initial_P, float Q, float R) {
-    kf->x = initial_x;
-    kf->P = initial_P;
-    kf->Q = Q;
-    kf->R = R;
-}
-
-// Обновление фильтра Калмана
-static float kalmanFilterUpdate(KalmanFilter *kf, float measurement) {
-    // Прогноз
-    kf->P = kf->P + kf->Q;
-
-    // Обновление
-    kf->K = kf->P / (kf->P + kf->R);
-    kf->x = kf->x + kf->K * (measurement - kf->x);
-    kf->P = (1 - kf->K) * kf->P;
-
-    return kf->x;
-}
-*/
-///////////////////////////
 
 void spi_init(spi_device_handle_t *handle) {
 	//SPI_BEGIN
@@ -200,10 +168,9 @@ void mpu_init(spi_device_handle_t handle) {
 void mpu_accel_init(spi_device_handle_t handle,int16_t *accel_offsets) {
 	uint8_t buffer[16];
 	memset(buffer, 0, sizeof(buffer));
-	mpu_write_byte(handle, ACCEL_CONFIG, ACCEL_16G);
+	mpu_write_byte(handle, ACCEL_CONFIG, ACCEL_2G);
 	mpu_read_bytes(handle, ACCEL_CONFIG, 1, buffer);
 	ESP_LOGI("mpu_accel_init","mpu sensivety: %x",buffer[0]);
-	/*
 	int32_t x_sum = 0, y_sum = 0, z_sum = 0;
     int16_t x = 0, y = 0, z = 0;
 	for (int i = 0; i < CALIBRATION_SAMPLES; i++) {
@@ -226,16 +193,14 @@ void mpu_accel_init(spi_device_handle_t handle,int16_t *accel_offsets) {
     ESP_LOGI("mpu_accel_init","accel_offsets_y: %d",accel_offsets[1]);	
     accel_offsets[2] = -(z_sum / CALIBRATION_SAMPLES);
     ESP_LOGI("mpu_accel_init","accel_offsets_z: %d",accel_offsets[2]);	
-    */
 };
 
 void mpu_gyro_init(spi_device_handle_t handle,int16_t *gyro_offsets) {
 	uint8_t buffer[16];
 	memset(buffer, 0, sizeof(buffer));
-	mpu_write_byte(handle, GYRO_CONFIG, GYRO_2000_DPS);
+	mpu_write_byte(handle, GYRO_CONFIG, GYRO_250_DPS);
 	mpu_read_bytes(handle, GYRO_CONFIG, 1, buffer);
 	ESP_LOGI("mpu_accel_init","mpu sensivety: %x",buffer[0]);
-	/*
 	int32_t x_sum = 0, y_sum = 0, z_sum = 0;
     int16_t x = 0, y = 0, z = 0;
 	for (int i = 0; i < CALIBRATION_SAMPLES; i++) {
@@ -258,7 +223,6 @@ void mpu_gyro_init(spi_device_handle_t handle,int16_t *gyro_offsets) {
     ESP_LOGI("mpu_accel_init","accel_offsets_y: %d",gyro_offsets[1]);	
     gyro_offsets[2] = -(z_sum / CALIBRATION_SAMPLES);
     ESP_LOGI("mpu_accel_init","accel_offsets_z: %d",gyro_offsets[2]);	
-    */
 };
 
 void mpu_whoami(spi_device_handle_t handle) {
@@ -288,17 +252,21 @@ void mpu_read_accel(spi_device_handle_t handle,uint8_t *data,int16_t *accel_offs
 	/*for(int i =0;i<6;i++){
 		ESP_LOGI("mpu_read_accel","data: %x",data[i]);	
 	}*/
-    int16_t x = data[0] << 8 | data[1];
-    int16_t y = data[2] << 8 | data[3];
-    int16_t z = data[4] << 8 | data[5];
+    float x = data[0] << 8 | data[1];
+    float y = data[2] << 8 | data[3];
+    float z = data[4] << 8 | data[5];
     
     x += accel_offsets[0];
     y += accel_offsets[1];
     z += accel_offsets[2];
     
-    ESP_LOGI("mpu_read_accel","x: %d",x);	
-    ESP_LOGI("mpu_read_accel","y: %d",y);	
-    ESP_LOGI("mpu_read_accel","z: %d",z);	
+    x = x / 32768 * ACCEL_2G_sens;
+    y = y / 32768 * ACCEL_2G_sens;
+    z = z / 32768 * ACCEL_2G_sens;
+    
+    ESP_LOGI("mpu_read_accel","x: %.2f",x);	
+    ESP_LOGI("mpu_read_accel","y: %.2f",y);	
+    ESP_LOGI("mpu_read_accel","z: %.2f",z);	
 }
 
 void mpu_read_gyro(spi_device_handle_t handle,uint8_t *data,int16_t * gyro_offsets) {
@@ -307,17 +275,21 @@ void mpu_read_gyro(spi_device_handle_t handle,uint8_t *data,int16_t * gyro_offse
 	/*for(int i =0;i<6;i++){
 		ESP_LOGI("mpu_read_accel","data: %x",data[i]);	
 	}*/
-    int16_t x = data[0] << 8 | data[1];
-    int16_t y = data[2] << 8 | data[3];
-    int16_t z = data[4] << 8 | data[5];
+    float x = data[0] << 8 | data[1];
+    float y = data[2] << 8 | data[3];
+    float z = data[4] << 8 | data[5];
     
     x += gyro_offsets[0];
     y += gyro_offsets[1];
     z += gyro_offsets[2];
     
-    ESP_LOGI("mpu_read_gyro","x: %d",x);	
-    ESP_LOGI("mpu_read_gyro","y: %d",y);	
-    ESP_LOGI("mpu_read_gyro","z: %d",z);	
+    x = x / 32768 * GYRO_250_DPS_sens;
+    y = y / 32768 * GYRO_250_DPS_sens;
+    z = z / 32768 * GYRO_250_DPS_sens;
+    
+    ESP_LOGI("mpu_read_gyro","x: %.2f",x);	
+    ESP_LOGI("mpu_read_gyro","y: %.2f",y);	
+    ESP_LOGI("mpu_read_gyro","z: %.2f",z);	
 }
 
 void mpu_config(spi_device_handle_t handle,uint8_t *data) {
