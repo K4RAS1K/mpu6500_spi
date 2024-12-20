@@ -1,4 +1,4 @@
-#include "mpu6500_lib.c"
+#include "mpu6500_lib.h"
 
 void app_main(void)
 {

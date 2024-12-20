@@ -1,6 +1,6 @@
 set(srcs "main.c"
          "mpu6500_lib.c"
-         "KalmanFilter.c")
+         "spi_driver.c")
 set(include_dirs ".")
 
 idf_component_register(SRCS "${srcs}"
