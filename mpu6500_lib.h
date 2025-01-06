@@ -13,7 +13,7 @@
 #include "spi_driver.h"
 
 
-#define CALIBRATION_SAMPLES 100
+#define CALIBRATION_SAMPLES 1000
 
 #define WHO_AM_I    		0x75
 #define PWR_MGMT_1  		0x6B
@@ -49,7 +49,6 @@
 
 #define CONFIG              0x1A
 
-
 void mpu6500_data(void);
 
 void mpu_reset_user_ctrl(spi_device_handle_t handle);
@@ -60,19 +59,27 @@ void mpu_reset(spi_device_handle_t handle);
 
 void mpu_init(spi_device_handle_t handle);
 
-void mpu_accel_init(spi_device_handle_t handle,int16_t *accel_offsets);
+void mpu_accel_init(spi_device_handle_t handle);
 
-void mpu_gyro_init(spi_device_handle_t handle,int16_t *gyro_offsets);
+void mpu_gyro_init(spi_device_handle_t handle);
 
 void mpu_whoami(spi_device_handle_t handle);
 
 void mpu_smplrt_div(spi_device_handle_t handle, uint8_t smplrt_div, uint8_t *data);
 
-void mpu_read_accel(spi_device_handle_t handle,uint8_t *data,int16_t *accel_offsets);
+void mpu_read_accel(spi_device_handle_t handle,uint8_t *data);
 
-void mpu_read_gyro(spi_device_handle_t handle,uint8_t *data,int16_t * gyro_offsets);
+void mpu_read_gyro(spi_device_handle_t handle,uint8_t *data);
 
 void mpu_config(spi_device_handle_t handle,uint8_t *data);
+
+void gyro_create_offset(spi_device_handle_t handle);
+
+void accel_create_offset(spi_device_handle_t handle);
+
+void gyro_add_offset(float *x,float *y,float *z);
+
+void accel_add_offset(float *x,float *y,float *z);
 
 
 #endif
