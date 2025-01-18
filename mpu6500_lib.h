@@ -11,7 +11,7 @@
 #include <string.h>
 #include "esp_log.h"
 #include "spi_driver.h"
-
+#include <math.h>
 
 #define CALIBRATION_SAMPLES 1000
 
@@ -65,13 +65,13 @@ void mpu_gyro_init(spi_device_handle_t handle);
 
 void mpu_whoami(spi_device_handle_t handle);
 
-void mpu_smplrt_div(spi_device_handle_t handle, uint8_t smplrt_div, uint8_t *data);
+void mpu_smplrt_div(spi_device_handle_t handle, uint8_t smplrt_div);
 
-void mpu_read_accel(spi_device_handle_t handle,uint8_t *data);
+float* mpu_read_accel(spi_device_handle_t handle,float *accel_data);
 
-void mpu_read_gyro(spi_device_handle_t handle,uint8_t *data);
+float* mpu_read_gyro(spi_device_handle_t handle,float *gyro_data);
 
-void mpu_config(spi_device_handle_t handle,uint8_t *data);
+void mpu_config(spi_device_handle_t handle);
 
 void gyro_create_offset(spi_device_handle_t handle);
 
@@ -81,5 +81,6 @@ void gyro_add_offset(float *x,float *y,float *z);
 
 void accel_add_offset(float *x,float *y,float *z);
 
+struct MotionData* calculate_position(struct MotionData* accel_data, float *acceleration);
 
 #endif
