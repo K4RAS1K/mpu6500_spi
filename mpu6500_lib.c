@@ -123,7 +123,7 @@ float* mpu_read_gyro(spi_device_handle_t handle,float *gyro_data) {
 
 void mpu_config(spi_device_handle_t handle) {
 	uint8_t data[16]; 
-    memset(data, 0, sizeof(data));
+    memset(data, 0, sizeof(data));	
 	mpu_write_byte(handle,CONFIG, 0x03);
 	mpu_read_bytes(handle, CONFIG, 1,  data);
 	for(int i =0;i<1;i++){
@@ -149,11 +149,11 @@ void gyro_create_offset(spi_device_handle_t handle) {
         vTaskDelay(pdMS_TO_TICKS(10));
     }
     gyro_offsets[0] = -(x_sum / CALIBRATION_SAMPLES);
-    ESP_LOGI("mpu_gyro_init","accel_offsets_x: %d",gyro_offsets[0]);	
+    ESP_LOGI("mpu_gyro_init","gyro_offsets_x: %d",gyro_offsets[0]);	
     gyro_offsets[1] = -(y_sum / CALIBRATION_SAMPLES);
-    ESP_LOGI("mpu_gyro_init","accel_offsets_y: %d",gyro_offsets[1]);	
+    ESP_LOGI("mpu_gyro_init","gyro_offsets_y: %d",gyro_offsets[1]);	
     gyro_offsets[2] = -(z_sum / CALIBRATION_SAMPLES);
-    ESP_LOGI("mpu_gyro_init","accel_offsets_z: %d",gyro_offsets[2]);	
+    ESP_LOGI("mpu_gyro_init","gyro_offsets_z: %d",gyro_offsets[2]);	
 }
 
 void accel_create_offset(spi_device_handle_t handle) {
@@ -182,15 +182,15 @@ void accel_create_offset(spi_device_handle_t handle) {
 }
 
 void gyro_add_offset(float *x,float *y,float *z) {
-	x += gyro_offsets[0];
-    y += gyro_offsets[1];
-    z += gyro_offsets[2];	
+	*x += gyro_offsets[0];
+    *y += gyro_offsets[1];
+    *z += gyro_offsets[2];	
 }
 
 void accel_add_offset(float *x,float *y,float *z) {
-    x += accel_offsets[0];
-    y += accel_offsets[1];
-    z += accel_offsets[2];
+    *x += accel_offsets[0];
+    *y += accel_offsets[1];
+    *z += accel_offsets[2];
 }
 
 struct MotionData* calculate_position(struct MotionData* accel_data, float *acceleration) {
@@ -223,6 +223,8 @@ void mpu6500_data(void) {
 	float gyro_data[3] = {0,0,0};
 	struct MotionData accel[3] = 
 	{{0,0,0},{0,0,0},{0,0,0}};
+	float filtered_accel[3];
+	float filtered_gyro[3];
 	spi_device_handle_t handle;
 	spi_init(&handle);
 	mpu_whoami(handle);
@@ -233,6 +235,7 @@ void mpu6500_data(void) {
 	while(1) {
 		mpu_read_accel(handle,accel_data);
 		mpu_read_gyro(handle,gyro_data);
+		FilterSensorData(accel_data, gyro_data, filtered_accel, filtered_gyro);
 		calculate_position(accel,accel_data);
 		ESP_LOGI("mpu_read_gyro", "x: %.3f, y: %.3f, z: %.3f\r", gyro_data[0], gyro_data[1], gyro_data[2]);
 		ESP_LOGI("mpu_read_accel", "x: %.3f, y: %.3f, z: %.3f\r", accel_data[0], accel_data[1], accel_data[2]);

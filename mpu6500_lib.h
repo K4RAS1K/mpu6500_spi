@@ -12,6 +12,7 @@
 #include "esp_log.h"
 #include "spi_driver.h"
 #include <math.h>
+#include "kalman_filter.h"
 
 #define CALIBRATION_SAMPLES 1000
 
