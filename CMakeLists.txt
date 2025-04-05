@@ -1,7 +1,7 @@
 set(srcs "main.c"
          "mpu6500_lib.c"
          "spi_driver.c"
-         "kalman_filter.c")
+         "MadgwickAHRS/MadgwickAHRS.c")
 set(include_dirs ".")
 
 idf_component_register(SRCS "${srcs}"

@@ -12,9 +12,8 @@
 #include "esp_log.h"
 #include "spi_driver.h"
 #include <math.h>
-#include "kalman_filter.h"
 
-#define CALIBRATION_SAMPLES 1000
+#define CALIBRATION_SAMPLES 100
 
 #define WHO_AM_I    		0x75
 #define PWR_MGMT_1  		0x6B
@@ -49,6 +48,9 @@
 #define GYRO_XOUT_H 		0x43
 
 #define CONFIG              0x1A
+
+#define USER_CTRL 			0x6A
+#define DMP_ENABLE 			0x80
 
 void mpu6500_data(void);
 

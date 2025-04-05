@@ -1,7 +1,9 @@
 #include "mpu6500_lib.h"
+#include "MadgwickAHRS/MadgwickAHRS.h"
 
 int16_t accel_offsets[3]={0,0,0};
 int16_t gyro_offsets[3]={0,0,0};
+
 
 struct MotionData {
 	float acceleration;
@@ -114,9 +116,9 @@ float* mpu_read_gyro(spi_device_handle_t handle,float *gyro_data) {
     y += gyro_offsets[1];
     z += gyro_offsets[2];
 
-    gyro_data[0] = (x / 32768.0 * GYRO_250_DPS_sens);
-    gyro_data[1] = (y / 32768.0 * GYRO_250_DPS_sens);
-    gyro_data[2] = (z / 32768.0 * GYRO_250_DPS_sens);
+    gyro_data[0] = (x / 32768.0 * GYRO_250_DPS_sens * 3.141592f / 180.00f);
+    gyro_data[1] = (y / 32768.0 * GYRO_250_DPS_sens * 3.141592f / 180.00f);
+    gyro_data[2] = (z / 32768.0 * GYRO_250_DPS_sens * 3.141592f / 180.00f);
     
     return gyro_data;
 }
@@ -128,6 +130,16 @@ void mpu_config(spi_device_handle_t handle) {
 	mpu_read_bytes(handle, CONFIG, 1,  data);
 	for(int i =0;i<1;i++){
 		ESP_LOGI("mpu_config","data: %x",data[i]);	
+	}
+}
+
+void dmp_init(spi_device_handle_t handle) {
+	uint8_t data[16]; 
+    memset(data, 0, sizeof(data));	
+	mpu_write_byte(handle,USER_CTRL, DMP_ENABLE);
+	mpu_read_bytes(handle, USER_CTRL, 1,  data);
+	for(int i =0;i<1;i++){
+		ESP_LOGI("dmp_init","data: %x",data[i]);	
 	}
 }
 
@@ -196,24 +208,12 @@ void accel_add_offset(float *x,float *y,float *z) {
 struct MotionData* calculate_position(struct MotionData* accel_data, float *acceleration) {
 	float time = 0.01;
 	
-	accel_data[0].acceleration = acceleration[0];
-	accel_data[1].acceleration = acceleration[1];
-	accel_data[2].acceleration = acceleration[2];
 	
-	accel_data[0].velocity = accel_data[0].velocity + accel_data[0].acceleration * time;
-	accel_data[0].position = accel_data[0].position + 
-							 accel_data[0].velocity * time + 
-							 accel_data[0].acceleration * time * time;
-	
-	accel_data[1].velocity = accel_data[1].velocity + accel_data[1].acceleration * time;
-	accel_data[1].position = accel_data[1].position + 
-							 accel_data[1].velocity * time + 
-							 accel_data[1].acceleration * time * time;
-							 
-	accel_data[2].velocity = accel_data[2].velocity + accel_data[2].acceleration * time;
-	accel_data[2].position = accel_data[2].position + 
-							 accel_data[2].velocity * time + 
-							 accel_data[2].acceleration * time * time;
+	for(int i = 0 ; i < 3 ; i++){
+		accel_data[i].acceleration = acceleration[i];
+		accel_data[i].velocity = accel_data[i].velocity + accel_data[i].acceleration * time;
+		accel_data[i].position = accel_data[i].position + accel_data[i].velocity * time;
+	}
 							
 	return accel_data;
 }
@@ -223,24 +223,27 @@ void mpu6500_data(void) {
 	float gyro_data[3] = {0,0,0};
 	struct MotionData accel[3] = 
 	{{0,0,0},{0,0,0},{0,0,0}};
-	float filtered_accel[3];
-	float filtered_gyro[3];
+	//float filtered_accel[3];
+	//float filtered_gyro[3];
 	spi_device_handle_t handle;
 	spi_init(&handle);
 	mpu_whoami(handle);
 	mpu_init(handle);
 	mpu_config(handle);
+	dmp_init(handle);
 	mpu_accel_init(handle);
 	mpu_gyro_init(handle);
 	while(1) {
 		mpu_read_accel(handle,accel_data);
 		mpu_read_gyro(handle,gyro_data);
-		FilterSensorData(accel_data, gyro_data, filtered_accel, filtered_gyro);
+		//FilterSensorData(accel_data, gyro_data, filtered_accel, filtered_gyro);
 		calculate_position(accel,accel_data);
 		ESP_LOGI("mpu_read_gyro", "x: %.3f, y: %.3f, z: %.3f\r", gyro_data[0], gyro_data[1], gyro_data[2]);
 		ESP_LOGI("mpu_read_accel", "x: %.3f, y: %.3f, z: %.3f\r", accel_data[0], accel_data[1], accel_data[2]);
 		ESP_LOGI("mpu_read_coords", "x: %.3f, y: %.3f, z: %.3f\r\n", accel[0].position, accel[1].position, accel[2].position);
-		//mpu_read_gyro(handle,data);
-		vTaskDelay(100 / portTICK_PERIOD_MS);
+		MadgwickAHRSupdateIMU(gyro_data[0], gyro_data[1], gyro_data[2], accel_data[0], accel_data[1], accel_data[2]);
+		computeAngles();
+		ESP_LOGI("mpu_read_orientation", "yaw: %.3f, pitch: %.3f, roll: %.3f\r\n", 20+yaw, pitch, roll);
+		vTaskDelay(10 / portTICK_PERIOD_MS);
 	}
 }
