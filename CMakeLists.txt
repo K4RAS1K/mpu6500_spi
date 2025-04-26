@@ -4,7 +4,8 @@ set(srcs "main.c"
          "MadgwickAHRS/MadgwickAHRS.c"
          #"MahonyAHRS/MahonyAHRS.c"
          "MovingAverage/MovingAverage.c"
-         "HighPassFilter/HighPassFilter.c")
+         "HighPassFilter/HighPassFilter.c"
+         "Q_to_a/quartirions_to_angels.c")
          
 set(include_dirs ".")
 

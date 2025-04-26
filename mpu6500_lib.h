@@ -16,25 +16,26 @@
 //#include "MahonyAHRS/MahonyAHRS.h"
 #include "MovingAverage/MovingAverage.h"
 #include "HighPassFilter/HighPassFilter.h"
+#include "Q_to_a/quartirions_to_angels.h"
 
 #define ACCEL_16G
 #define GYRO_2000_DPS
 
 #ifdef ACCEL_2G
 	#define ACCEL			0xE0
-	#define ACCEL_sens		(1.0f/16384.0f) * G2MSS
+	#define ACCEL_sens		(1.0f/16384.0f)
 #endif
 #ifdef ACCEL_4G
 	#define ACCEL			0xE8
-	#define ACCEL_sens		(1.0f/8192.0f) * G2MSS
+	#define ACCEL_sens		(1.0f/8192.0f)
 #endif
 #ifdef ACCEL_8G
 	#define ACCEL			0xF0
-	#define ACCEL_sens		(1.0f/4096.0f) * G2MSS
+	#define ACCEL_sens		(1.0f/4096.0f)
 #endif
 #ifdef ACCEL_16G
 	#define ACCEL			0xF8
-	#define ACCEL_sens		(1.0f/2048.0f) * G2MSS
+	#define ACCEL_sens		(1.0f/2048.0f)
 #endif
 #ifdef GYRO_250_DPS
 	#define GYRO			0xE0
@@ -78,9 +79,17 @@
 #define CONFIG              0x1A
 
 #define USER_CTRL 			0x6A
-#define DMP_ENABLE 			0x80
+#define DMP_ENABLE 			0xC0
 
 #define CONFIG           	0x1A
+
+#define DMP_READ			0x74
+
+struct MotionData {
+	float acceleration;
+	float velocity;
+	float position;
+};
 
 void mpu6500_data(void);
 

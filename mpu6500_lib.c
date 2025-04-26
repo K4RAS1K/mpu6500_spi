@@ -1,14 +1,10 @@
 #include "mpu6500_lib.h"
+#include "MadgwickAHRS/MadgwickAHRS.h"
+#include "Q_to_a/quartirions_to_angels.h"
 
 int16_t accel_offsets[3]={0,0,0};
 int16_t gyro_offsets[3]={0,0,0};
  
-struct MotionData {
-	float acceleration;
-	float velocity;
-	float position;
-};
-
 struct MA_Struct {
 	MovingAverage AX;
 	MovingAverage AY;
@@ -181,6 +177,16 @@ void dmp_init(spi_device_handle_t handle) {
 	}
 }
 
+void dmp_read(spi_device_handle_t handle, struct Quaternion* quartirions) {
+	uint8_t fifo_buffer[42];
+	memset(fifo_buffer, 0, sizeof(fifo_buffer));
+	mpu_read_bytes(handle, GYRO_XOUT_H, 42,  fifo_buffer);
+	quartirions->w = (float)((int16_t)((fifo_buffer[0] << 8) | fifo_buffer[1])) / 16384.0f;//w
+    quartirions->x = (float)((int16_t)((fifo_buffer[4] << 8) | fifo_buffer[5])) / 16384.0f;//x
+    quartirions->y = (float)((int16_t)((fifo_buffer[8] << 8) | fifo_buffer[9])) / 16384.0f;//y
+    quartirions->z = (float)((int16_t)((fifo_buffer[12] << 8) | fifo_buffer[13])) / 16384.0f;//z
+}
+
 void gyro_create_offset(spi_device_handle_t handle) {
 	int32_t x_sum = 0, y_sum = 0, z_sum = 0;
     int16_t x = 0, y = 0, z = 0;
@@ -287,12 +293,13 @@ void HP_Update(float *accel_data) {
 	accel_data[2] = HighPassFilter_Update(&HP_Struct.AZ, accel_data[2]);
 }
 
-
 void mpu6500_data(void) {
 	float accel_data[3] = {0,0,0};
 	float gyro_data[3] = {0,0,0};
 	struct MotionData accel[3] = 
 	{{0,0,0},{0,0,0},{0,0,0}};
+	struct Quaternion quartirions = {0,0,0,0};
+	struct EulerAngles EAndles ={0,0,0};
 	spi_device_handle_t handle;
 	spi_init(&handle);
 	mpu_whoami(handle);
@@ -317,7 +324,12 @@ void mpu6500_data(void) {
 		computeAnglesMadgwick();
 		//MahonyAHRSupdateIMU(gyro_data[0], gyro_data[1], gyro_data[2], accel_data[0], accel_data[1], accel_data[2]);
 		//computeAnglesMahony();
+		ESP_LOGI("my_quart","w: %.3f, x: %.3f, y: %.3f, z: %.3f\r", q0, q1, q2, q3);
 		ESP_LOGI("mpu_read_orientation", "yaw: %.3f, pitch: %.3f, roll: %.3f\r\n", yaw, pitch, roll);
+		dmp_read(handle, &quartirions);
+		computeAngles(quartirions,&EAndles);
+		ESP_LOGI("DMP","w: %.3f, x: %.3f, y: %.3f, z: %.3f\r", quartirions.w,quartirions.x,quartirions.y,quartirions.z);
+		ESP_LOGI("DMP_orientation", "yaw: %.3f, pitch: %.3f, roll: %.3f\r\n", EAndles.yaw, EAndles.pitch, EAndles.roll);
 		vTaskDelay(25 / portTICK_PERIOD_MS);
 	}
 }
